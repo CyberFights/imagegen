@@ -1,6 +1,5 @@
 // server.js
 import express from 'express';
-import { Mistral } from '@mistralai/mistralai';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -8,10 +7,8 @@ dotenv.config();
 const app = express();
 app.use(express.json());
 
-// Initialize Mistral client
-const client = new Mistral({
-  apiKey: process.env.MISTRAL_API_KEY,
-});
+// API key
+const MISTRAL_API_KEY = process.env.MISTRAL_API_KEY;
 
 /**
  * POST /api/create-image-agent
@@ -37,47 +34,83 @@ app.post('/api/create-image-agent', async (req, res) => {
       });
     }
 
-    // Create agent with image_generation tool [web:2]
-    const imageAgent = await client.agents.create({
-      model,
-      name,
-      description,
-      instructions,
-      tools: [{ type: 'image_generation' }],
-      completionArgs: {
-        temperature,
-        top_p,
+    // Step 1: Create agent with image_generation tool using REST API [web:62]
+    const agentResponse = await fetch('https://api.mistral.ai/v1/agents', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${MISTRAL_API_KEY}`,
+        'Content-Type': 'application/json',
       },
+      body: JSON.stringify({
+        model,
+        name,
+        description,
+        instructions,
+        tools: [{ type: 'image_generation' }],
+        completion_args: {
+          temperature,
+          top_p,
+        },
+      }),
     });
 
-    const agentId = imageAgent.id;
+    if (!agentResponse.ok) {
+      const error = await agentResponse.json();
+      throw new Error(error.message || 'Failed to create agent');
+    }
 
-    // Start conversation with the agent and generate image [web:2]
-    const response = await client.conversations.start({
-      agentId: agentId,
-      inputs: input_prompt,
+    const agent = await agentResponse.json();
+    const agentId = agent.id;
+
+    // Step 2: Start conversation with the agent and generate image [web:11][web:54]
+    const conversationResponse = await fetch('https://api.mistral.ai/v1/conversations', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${MISTRAL_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        agent_id: agentId,
+        inputs: input_prompt,
+      }),
     });
 
-    const conversationId = response.conversationId;
+    if (!conversationResponse.ok) {
+      const error = await conversationResponse.json();
+      throw new Error(error.message || 'Failed to start conversation');
+    }
 
-    // Extract file_id from the response's tool_file chunk [web:2]
+    const conversation = await conversationResponse.json();
+    const conversationId = conversation.conversation_id;
+
+    // Step 3: Extract file_id from the response's tool_file chunk [web:2]
     let fileId = null;
-    const lastOutput = response.outputs[response.outputs.length - 1];
+    const lastOutput = conversation.outputs[conversation.outputs.length - 1];
 
     if (lastOutput && lastOutput.content) {
       for (const chunk of lastOutput.content) {
         if (chunk.type === 'tool_file') {
-          fileId = chunk.fileId;
+          fileId = chunk.file_id;
           break;
         }
       }
     }
 
-    // Get signed URL for the generated image [web:29]
+    // Step 4: Get signed URL for the generated image [web:29]
     let imageUrl = null;
     if (fileId) {
-      const signedUrlResponse = await client.files.getSignedUrl({ fileId });
-      imageUrl = signedUrlResponse.url;
+      const signedUrlResponse = await fetch(`https://api.mistral.ai/v1/files/${fileId}/signed_url`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${MISTRAL_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (signedUrlResponse.ok) {
+        const signedUrlData = await signedUrlResponse.json();
+        imageUrl = signedUrlData.url;
+      }
     }
 
     // Return JSON response with image_url
