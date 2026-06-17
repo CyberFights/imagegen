@@ -1,6 +1,6 @@
 // server.js
 import express from 'express';
-import { MistralClient } from '@mistralai/mistralai';
+import MistralAI from '@mistralai/mistralai';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -8,23 +8,10 @@ dotenv.config();
 const app = express();
 app.use(express.json());
 
-// Initialize Mistral client
-const client = new MistralClient({
+// Initialize Mistral client (default export)
+const client = new MistralAI({
   apiKey: process.env.MISTRAL_API_KEY,
 });
-
-// Request schema (using JSDoc for clarity)
-/**
- * @typedef {Object} ImageAgentRequest
- * @property {string} name - Agent name
- * @property {string} description - Agent description
- * @property {string} [instructions] - Agent instructions
- * @property {string} [model] - Model to use (default: mistral-medium-latest)
- * @property {string} input_prompt - Prompt for image generation
- * @property {string} [image_url] - Optional URL for image editing
- * @property {number} [temperature] - Temperature (default: 0.3)
- * @property {number} [top_p] - Top_p (default: 0.95)
- */
 
 /**
  * POST /api/create-image-agent
@@ -39,7 +26,7 @@ app.post('/api/create-image-agent', async (req, res) => {
       model = 'mistral-medium-latest',
       input_prompt,
       image_url,
-      temperature = 0.7,
+      temperature = 0.3,
       top_p = 0.95,
     } = req.body;
 
