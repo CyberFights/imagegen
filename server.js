@@ -1,6 +1,6 @@
 // server.js
 import express from 'express';
-import MistralAI from '@mistralai/mistralai';
+import { Mistral } from '@mistralai/mistralai';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -8,8 +8,8 @@ dotenv.config();
 const app = express();
 app.use(express.json());
 
-// Initialize Mistral client (default export)
-const client = new MistralAI({
+// Initialize Mistral client
+const client = new Mistral({
   apiKey: process.env.MISTRAL_API_KEY,
 });
 
