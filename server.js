@@ -18,9 +18,6 @@ app.get('/api/status', (req, res) => {
   res.json({ status: 'server running' });
 });
 /**
- * POST /api/generate-image
- * Directly generates an image using Mistral's image generation API
- */
 app.post('/api/generate-image', async (req, res) => {
   try {
     const { prompt, size = "1024x1024" } = req.body;
@@ -29,7 +26,7 @@ app.post('/api/generate-image', async (req, res) => {
       return res.status(400).json({ error: "Missing required field: prompt" });
     }
 
-    // Step 1: Call Mistral image generation API
+    // Step 1: Generate image
     const genResponse = await fetch("https://api.mistral.ai/v1/images/generations", {
       method: "POST",
       headers: {
@@ -37,87 +34,22 @@ app.post('/api/generate-image', async (req, res) => {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
+        model: "pixtral-12b",   // REQUIRED
         prompt,
         size
       })
     });
-
-    if (!genResponse.ok) {
-      const err = await genResponse.json();
-      throw new Error(err.message || "Image generation failed");
-    }
 
     const genData = await genResponse.json();
-    const fileId = genData.data?.[0]?.file_id;
+
+    if (!genResponse.ok) {
+      throw new Error(genData.message || "Image generation failed");
+    }
+
+    const fileId = genData?.data?.[0]?.file_id;
 
     if (!fileId) {
-      throw new Error("No file_id returned from Mistral");
-    }
-
-    // Step 2: Get signed URL for the generated image
-    const signedUrlResponse = await fetch(`https://api.mistral.ai/v1/files/${fileId}/signed_url`, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${MISTRAL_API_KEY}`,
-        "Content-Type": "application/json"
-      }
-    });
-
-    if (!signedUrlResponse.ok) {
-      const err = await signedUrlResponse.json();
-      throw new Error(err.message || "Failed to fetch signed URL");
-    }
-
-    const signedUrlData = await signedUrlResponse.json();
-    const imageUrl = signedUrlData.url;
-
-    res.json({
-      status: "success",
-      file_id: fileId,
-      image_url: imageUrl
-    });
-
-  } catch (error) {
-    console.error("Error generating image:", error);
-    res.status(500).json({ error: error.message });
-  }
-});
-/**
- * POST /api/edit-image
- * Edits an existing image using Mistral's image editing API
- */
-app.post('/api/edit-image', async (req, res) => {
-  try {
-    const { image_url, prompt, size = "1024x1024" } = req.body;
-
-    if (!image_url || !prompt) {
-      return res.status(400).json({ error: "Missing required fields: image_url, prompt" });
-    }
-
-    // Step 1: Call Mistral image editing API
-    const editResponse = await fetch("https://api.mistral.ai/v1/images/edits", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${MISTRAL_API_KEY}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        image_url,
-        prompt,
-        size
-      })
-    });
-
-    if (!editResponse.ok) {
-      const err = await editResponse.json();
-      throw new Error(err.message || "Image editing failed");
-    }
-
-    const editData = await editResponse.json();
-    const fileId = editData.data?.[0]?.file_id;
-
-    if (!fileId) {
-      throw new Error("No file_id returned from Mistral");
+      throw new Error("Mistral did not return a file_id");
     }
 
     // Step 2: Get signed URL
@@ -129,12 +61,11 @@ app.post('/api/edit-image', async (req, res) => {
       }
     });
 
-    if (!signedUrlResponse.ok) {
-      const err = await signedUrlResponse.json();
-      throw new Error(err.message || "Failed to fetch signed URL");
-    }
-
     const signedUrlData = await signedUrlResponse.json();
+
+    if (!signedUrlResponse.ok) {
+      throw new Error(signedUrlData.message || "Failed to fetch signed URL");
+    }
 
     res.json({
       status: "success",
@@ -143,69 +74,7 @@ app.post('/api/edit-image', async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Error editing image:", error);
-    res.status(500).json({ error: error.message });
-  }
-});
-/**
- * POST /api/variation-image
- * Generates variations of an existing image using Mistral's variation API
- */
-app.post('/api/variation-image', async (req, res) => {
-  try {
-    const { image_url, size = "1024x1024", count = 1 } = req.body;
-
-    if (!image_url) {
-      return res.status(400).json({ error: "Missing required field: image_url" });
-    }
-
-    // Step 1: Call Mistral variation API
-    const varResponse = await fetch("https://api.mistral.ai/v1/images/variations", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${MISTRAL_API_KEY}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        image_url,
-        size,
-        n: count
-      })
-    });
-
-    if (!varResponse.ok) {
-      const err = await varResponse.json();
-      throw new Error(err.message || "Image variation failed");
-    }
-
-    const varData = await varResponse.json();
-
-    // Collect all file_ids
-    const fileIds = varData.data.map(img => img.file_id);
-
-    // Step 2: Fetch signed URLs for each variation
-    const urls = [];
-    for (const fileId of fileIds) {
-      const signedUrlResponse = await fetch(`https://api.mistral.ai/v1/files/${fileId}/signed_url`, {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${MISTRAL_API_KEY}`,
-          "Content-Type": "application/json"
-        }
-      });
-
-      const signedUrlData = await signedUrlResponse.json();
-      urls.push(signedUrlData.url);
-    }
-
-    res.json({
-      status: "success",
-      file_ids: fileIds,
-      image_urls: urls
-    });
-
-  } catch (error) {
-    console.error("Error generating variations:", error);
+    console.error("Error generating image:", error);
     res.status(500).json({ error: error.message });
   }
 });
