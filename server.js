@@ -17,7 +17,7 @@ const MISTRAL_API_KEY = process.env.MISTRAL_API_KEY;
 app.get('/api/status', (req, res) => {
   res.json({ status: 'server running' });
 });
-/**
+
 app.post('/api/generate-image', async (req, res) => {
   try {
     const { prompt, size = "1024x1024" } = req.body;
